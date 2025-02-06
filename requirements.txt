@@ -1,0 +1,5 @@
+pytesseract
+opencv-python
+pandas
+pdf2image
+transformers
