@@ -4,10 +4,8 @@ from langchain_huggingface import HuggingFaceEmbeddings
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 import argparse
 
+EMBEDDING_MODEL = "BAAI/bge-base-en"  
 
-# Configuration
-EMBEDDING_MODEL = "BAAI/bge-base-en"  # Best open-source BERT-like model for embeddings
-LLM_MODEL = "llama3"  # Llama 3.3 model from Ollama
 
 def load_markdown_files(directory):
     texts = []

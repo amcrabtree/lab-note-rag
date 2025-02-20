@@ -10,6 +10,12 @@ cd lab-note-rag
 pip install -r requirements.txt
 ```
 
+Also install ollama [here](https://ollama.com/) and download the model by running the command below. Make sure you have >50 Gb free space on your computer.
+
+```sh
+ollama pull llama3.2
+```
+
 ### Run in Jupyter notebook
 
 After you open Jupyter Notebook, select `GPT-4o extraction.ipynb`
@@ -45,8 +51,6 @@ python3 database.py \
 3. Chat away. 
 
 ```sh
-ollama pull <model-name> 
-
 python3 lab_rag_query.py \
   --database "./test/notebook_database"
 ```
