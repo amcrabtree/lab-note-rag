@@ -41,7 +41,7 @@ def query_rag(question: str, graph: StateGraph, vector_store):
     context = "\n".join([doc.page_content for doc in relevant_docs])
     
     prompt = (
-        "You are an AI assistant. Use the following context to answer the question.\n\n"
+        "You are an expert microbiology assistant. Use the following context to answer the question.\n\n"
         f"Context:\n{context}\n\n"
         f"Question: {question}\nAnswer:"
     )
