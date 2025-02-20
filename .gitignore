@@ -2,4 +2,4 @@
 test/sample_notebook.md
 __pycache__/*
 .DS_Store
-
+test/

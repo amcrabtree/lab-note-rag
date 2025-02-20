@@ -6,6 +6,7 @@ from PIL import Image
 import io
 import argparse
 
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 default_prompt = """
     You are a microbiology researcher who is tasked with transcribing all the handwritten notes 
@@ -15,7 +16,7 @@ default_prompt = """
     Italicise any text in Latin. 
     If a date looks like the start of a new notebook entry, then make it a header. 
     if you detect a hand-drawn diagram, write a hash tag "#diagram" for each diagram detected. 
-    If you see a page number at the very bottom of the page, make it the main header for this page.
+    If you see a page number at the very bottom of the page, append it to every date header.
     """
 
 
@@ -65,12 +66,16 @@ def extract_text_from_image_openai(pil_image: Image, client: openai.OpenAI, prom
         return None
 
 
-def convert_notebook_to_text(pdf_path: str, api_key: str, prompt: str):
+def convert_notebook_to_text(pdf_path: str, api_key: str, prompt: str, book_id: str):
     # Set up OpenAI client
     client = openai.OpenAI(api_key=api_key)
 
     # Extract PIL images from PDF
     pil_img_list = pdf_to_image_list(pdf_path)
+
+    # Modify prompt to include book_id, if available
+    if book_id != "":
+        prompt += f' Add this text only under each date header "Written in "{book_id}":\n" '
 
     # Extract text from each image
     final_md_text = ""
@@ -80,8 +85,8 @@ def convert_notebook_to_text(pdf_path: str, api_key: str, prompt: str):
     return final_md_text
 
 
-# Create an ArgumentParser object
-parser = argparse.ArgumentParser(description="Turn PDF lab notebooks into Markdown.")
+# Argparse
+parser = argparse.ArgumentParser(description="Turn PDF lab notebook into Markdown.")
 parser.add_argument("--notebook", "-n",
                     help="Path to notebook PDF file.")
 parser.add_argument("--output_file", "-o", 
@@ -90,12 +95,14 @@ parser.add_argument("--api_key", "-a",
                     help="Your OpenAI API key used for billing.")
 parser.add_argument("--prompt", "-p", default="",
                     help="Custom prompt used to extract notebook. Optional.")
+parser.add_argument("--book_id", "-i", default="",
+                    help="Lab notebook name, ideally including author's name or initials. Optional.")
 
 if __name__ == "__main__":
     args = parser.parse_args()
     
     prompt = args.prompt if args.prompt != "" else default_prompt
-    notebook_text = convert_notebook_to_text(args.notebook, args.api_key, args.prompt)
+    notebook_text = convert_notebook_to_text(args.notebook, args.api_key, args.prompt, args.book_id)
 
     with open(args.output_file, "w") as f:
         f.write(notebook_text)
