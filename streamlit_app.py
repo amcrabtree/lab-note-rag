@@ -13,7 +13,6 @@ DATABASE_DIR = "./database"
 IMAGE_DIR = "./database/img"
 DATABASE_TSV = os.path.join(DATABASE_DIR, "lab_book_database.tsv")
 IMAGE_DPI = 100
-API_PASSWORD = "yeast"
 
 def split_double_page(image):
     width, height = image.size
@@ -90,7 +89,7 @@ with tab1:
         st.session_state.password = st.text_input("Enter your password", type="password")
 
     if st.session_state.password != "":
-        if st.session_state.password != API_PASSWORD:
+        if st.session_state.password != st.secrets["API_PASSWORD"]:
             st.markdown("Password is incorrect. Try again.")
         else:
             st.session_state.client = openai.OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
