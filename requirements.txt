@@ -7,3 +7,4 @@ langchain-ollama
 langgraph
 ollama
 streamlit
+pdf2image
