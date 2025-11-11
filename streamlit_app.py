@@ -98,6 +98,7 @@ with tab1:
         # --- UI ---
         uploaded_lab_book = st.file_uploader("Upload a combined lab notebook PDF", type=["pdf"],
                                             key=f"upload_{st.session_state.reset_counter}")
+        st.markdown("[Download example notebook](https://github.com/amcrabtree/lab-note-rag/blob/main/test/sample_notebook.pdf)")
 
         col1, col2 = st.columns(2)
         with col1:
