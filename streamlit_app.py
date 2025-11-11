@@ -31,7 +31,6 @@ extraction_instructions = """
     If you detect there is an agarose gel image, write a hash tag "#gel_image" for each gel image detected. 
     if you detect a hand-drawn agar plate diagram, write a hash tag "#plate_diagram" for each plate diagram detected. 
     There is a common strain named BJH001, sometimes just referred to as 001, which is referenced often.
-    Lab members include Angela, Emily, Paul.
     Other common terms include "Okada" as a type of dsRNA extraction protocol. 
     If you see a page number at the very bottom of the page, append it to each date header on that page.
     """
