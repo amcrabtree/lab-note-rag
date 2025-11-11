@@ -89,7 +89,6 @@ with tab1:
         password = st.text_input("Enter your password", type="password")
         if password == "yeast":
             st.session_state.client = openai.OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
-            st.rerun()
 
     else:
         # --- UI ---
