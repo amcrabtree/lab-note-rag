@@ -5,3 +5,4 @@ __pycache__/*
 test/
 database/
 .env
+.streamlit/secrets.toml

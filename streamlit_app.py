@@ -9,9 +9,6 @@ import fitz  # PyMuPDF
 from PIL import Image
 import openai
 
-load_dotenv(".env")
-OPEN_AI_KEY = os.getenv("OPENAI_API_KEY")
-CLIENT = openai.OpenAI(api_key=OPEN_AI_KEY)
 DATABASE_DIR = "./database"
 IMAGE_DIR = "./database/img"
 DATABASE_TSV = os.path.join(DATABASE_DIR, "lab_book_database.tsv")
@@ -60,6 +57,8 @@ if 'starting_page_number' not in st.session_state:
     st.session_state.starting_page_number = None
 if 'current_image_dict' not in st.session_state:
     st.session_state.current_image_dict = None
+if 'client' not in st.session_state:
+    st.session_state.client = None
 
 # ---------- Page Config ----------
 st.set_page_config(
@@ -85,161 +84,168 @@ tab1, tab2 = st.tabs(["📚 Upload Notebook", "🔍 Query Notebook"])
 with tab1:
     st.subheader("📚 Upload Lab Notebook")
 
-    # --- UI ---
-    uploaded_lab_book = st.file_uploader("Upload a combined lab notebook PDF", type=["pdf"],
-                                         key=f"upload_{st.session_state.reset_counter}")
+    if st.session_state.client is None:
+        password = st.text_input("Enter your password", type="password")
+        if password == "yeast":
+            st.session_state.client = openai.OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
+            st.rerun()
 
-    col1, col2 = st.columns(2)
-    with col1:
-        lab_book_name = st.text_input("Enter lab book name (ex: 'AMC Book 1')",
-                                      key=f"name_{st.session_state.reset_counter}")
-    with col2:
-        starting_page_number = st.number_input("Enter notebook starting page number", 
-                                               min_value=1, step=1, value=1,
-                                               key=f"page_{st.session_state.reset_counter}")
+    else:
+        # --- UI ---
+        uploaded_lab_book = st.file_uploader("Upload a combined lab notebook PDF", type=["pdf"],
+                                            key=f"upload_{st.session_state.reset_counter}")
 
-    # if st.session_state.uploaded_df is not None:
-    #     if st.button("Clear Data"):
-    #         st.session_state.reset_counter += 1  # change keys → widgets reset visually
-    #         st.session_state.uploaded_df = None
-    #         st.rerun()
+        col1, col2 = st.columns(2)
+        with col1:
+            lab_book_name = st.text_input("Enter lab book name (ex: 'AMC Book 1')",
+                                        key=f"name_{st.session_state.reset_counter}")
+        with col2:
+            starting_page_number = st.number_input("Enter notebook starting page number", 
+                                                min_value=1, step=1, value=1,
+                                                key=f"page_{st.session_state.reset_counter}")
 
-    # --- LOAD ---
+        # if st.session_state.uploaded_df is not None:
+        #     if st.button("Clear Data"):
+        #         st.session_state.reset_counter += 1  # change keys → widgets reset visually
+        #         st.session_state.uploaded_df = None
+        #         st.rerun()
 
-    if st.button("Load", type="primary", key=f"load_{st.session_state.reset_counter}"):
-        st.success(f"📄 {uploaded_lab_book.name} uploaded successfully!")
-        st.session_state.uploaded_df = None
-        st.session_state.current_image_dict = None
-        st.session_state.current_page_number = starting_page_number
-        st.session_state.starting_page_number = starting_page_number
+        # --- LOAD ---
 
-        current_image_dict = {}
-        st.session_state.timestamp = datetime.now().strftime("%Y-%m-%d")
+        if st.button("Load", type="primary", key=f"load_{st.session_state.reset_counter}"):
+            st.success(f"📄 {uploaded_lab_book.name} uploaded successfully!")
+            st.session_state.uploaded_df = None
+            st.session_state.current_image_dict = None
+            st.session_state.current_page_number = starting_page_number
+            st.session_state.starting_page_number = starting_page_number
 
-        # Read uploaded PDF into memory
-        pdf_bytes = uploaded_lab_book.read()
+            current_image_dict = {}
+            st.session_state.timestamp = datetime.now().strftime("%Y-%m-%d")
 
-        # Open PDF with PyMuPDF
-        doc = fitz.open(stream=pdf_bytes, filetype="pdf")
-        text_df = pd.DataFrame()
+            # Read uploaded PDF into memory
+            pdf_bytes = uploaded_lab_book.read()
 
-        with st.spinner("Extracting text from scanned pages.", show_time=True):
-            page_counter = starting_page_number
-            for i, page in enumerate(doc):
+            # Open PDF with PyMuPDF
+            doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+            text_df = pd.DataFrame()
 
-                # Render page to a pixmap
-                pix = page.get_pixmap(dpi=IMAGE_DPI)
-                raw_img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
-                img_list = split_double_page(raw_img)
+            with st.spinner("Extracting text from scanned pages- this may take about 1 minute/page", show_time=True):
+                page_counter = starting_page_number
+                for i, page in enumerate(doc):
 
-                for img in img_list: 
-                    current_image_dict[page_counter] = img
+                    # Render page to a pixmap
+                    pix = page.get_pixmap(dpi=IMAGE_DPI)
+                    raw_img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+                    img_list = split_double_page(raw_img)
 
-                    # Extract text and add to pandas dataframe
-                    text_output = extract_text_from_image_openai(img, CLIENT, extraction_instructions)
-                    row_df = pd.DataFrame({
-                        'lab_book_name': [lab_book_name],
-                        'scanned_page_number': [i+1],
-                        'physical_page_number': [page_counter],
-                        'timestamp': [st.session_state.timestamp],
-                        'image_filename': [f'{lab_book_name}_Page{page_counter}.png'],
-                        'extracted_text': [text_output],
-                    })
-                    text_df = pd.concat([text_df, row_df])
+                    for img in img_list: 
+                        current_image_dict[page_counter] = img
 
-                    page_counter += 1
+                        # Extract text and add to pandas dataframe
+                        text_output = extract_text_from_image_openai(img, st.session_state.client, extraction_instructions)
+                        row_df = pd.DataFrame({
+                            'lab_book_name': [lab_book_name],
+                            'scanned_page_number': [i+1],
+                            'physical_page_number': [page_counter],
+                            'timestamp': [st.session_state.timestamp],
+                            'image_filename': [f'{lab_book_name}_Page{page_counter}.png'],
+                            'extracted_text': [text_output],
+                        })
+                        text_df = pd.concat([text_df, row_df])
 
-            st.session_state.uploaded_df = text_df.copy()
-            st.session_state.current_image_dict = current_image_dict.copy()
-        doc.close()
+                        page_counter += 1
 
-    # --- DISPLAY ---
+                st.session_state.uploaded_df = text_df.copy()
+                st.session_state.current_image_dict = current_image_dict.copy()
+            doc.close()
 
-    if (st.session_state.uploaded_df is not None) and (st.session_state.current_image_dict is not None):
-        text_df = st.session_state.uploaded_df
-        current_page_number = st.session_state.current_page_number
-        starting_page_number = st.session_state.starting_page_number
-        max_page_number = len(text_df) + st.session_state.starting_page_number - 1
-        safe_name = lab_book_name.replace(" ", "_")
+        # --- DISPLAY ---
 
-        st.divider()
-        st.subheader(f"Page {current_page_number}")
-        
-        col1_img, col2_text = st.columns(2)
+        if (st.session_state.uploaded_df is not None) and (st.session_state.current_image_dict is not None):
+            text_df = st.session_state.uploaded_df
+            current_page_number = st.session_state.current_page_number
+            starting_page_number = st.session_state.starting_page_number
+            max_page_number = len(text_df) + st.session_state.starting_page_number - 1
+            safe_name = lab_book_name.replace(" ", "_")
 
-        with col1_img:
-            st.session_state.current_page_image = st.session_state.current_image_dict[current_page_number]
-            st.image(st.session_state.current_page_image, width='stretch')
-
-        with col2_text:
-            st.session_state.current_page_text = text_df[text_df['physical_page_number']==current_page_number]['extracted_text'][0]
-            input_text = st.text_area("Lab book page content", value=st.session_state.current_page_text, width='stretch', height='stretch')
-
-        col_back_page, _, _, _, _, col_forward_page = st.columns(6)
-
-        with col_back_page:
-            if current_page_number > starting_page_number:
-                if st.button("Backward", width="stretch"):
-                    text_df.loc[text_df['physical_page_number'] == current_page_number, 'extracted_text'] = input_text
-                    st.session_state.current_page_number -= 1
-                    st.rerun()
-
-        with col_forward_page:
-            if current_page_number < max_page_number:
-                if st.button("Forward", width="stretch"):
-                    text_df.loc[text_df['physical_page_number'] == current_page_number, 'extracted_text'] = input_text
-                    st.session_state.current_page_number += 1
-                    st.rerun()
-
-        # Save DataFrame to disk
-        if st.button("Save Updates", type="primary"):
-            text_df.loc[text_df['physical_page_number'] == current_page_number, 'extracted_text'] = input_text
+            st.divider()
+            st.subheader(f"Page {current_page_number}")
             
-            # Load this lab book into database
-            if os.path.exists(DATABASE_TSV):
-                database_df = pd.read_csv(DATABASE_TSV, sep="\t")
-            else: 
-                os.makedirs(DATABASE_DIR, exist_ok=True)
-                database_df = pd.DataFrame()
+            col1_img, col2_text = st.columns(2)
+
+            with col1_img:
+                st.session_state.current_page_image = st.session_state.current_image_dict[current_page_number]
+                st.image(st.session_state.current_page_image, width='stretch')
+
+            with col2_text:
+                st.session_state.current_page_text = text_df[text_df['physical_page_number']==current_page_number]['extracted_text'][0]
+                input_text = st.text_area("Lab book page content", value=st.session_state.current_page_text, width='stretch', height='stretch')
+
+            col_back_page, _, _, _, _, col_forward_page = st.columns(6)
+
+            with col_back_page:
+                if current_page_number > starting_page_number:
+                    if st.button("Backward", width="stretch"):
+                        text_df.loc[text_df['physical_page_number'] == current_page_number, 'extracted_text'] = input_text
+                        st.session_state.current_page_number -= 1
+                        st.rerun()
+
+            with col_forward_page:
+                if current_page_number < max_page_number:
+                    if st.button("Forward", width="stretch"):
+                        text_df.loc[text_df['physical_page_number'] == current_page_number, 'extracted_text'] = input_text
+                        st.session_state.current_page_number += 1
+                        st.rerun()
+
+            # Save DataFrame to disk
+            if st.button("Save Updates", type="primary"):
+                text_df.loc[text_df['physical_page_number'] == current_page_number, 'extracted_text'] = input_text
                 
-            # Make sure timestamp is a datetime type
-            for df in [database_df, text_df]:
-                if len(df) > 0:
-                    df['timestamp'] = pd.to_datetime(df['timestamp'])
+                # Load this lab book into database
+                if os.path.exists(DATABASE_TSV):
+                    database_df = pd.read_csv(DATABASE_TSV, sep="\t")
+                else: 
+                    os.makedirs(DATABASE_DIR, exist_ok=True)
+                    database_df = pd.DataFrame()
+                    
+                # Make sure timestamp is a datetime type
+                for df in [database_df, text_df]:
+                    if len(df) > 0:
+                        df['timestamp'] = pd.to_datetime(df['timestamp'])
 
-            # Concatenate the dataframes
-            combined_df = pd.concat([database_df, text_df], ignore_index=True)
-            combined_df = combined_df.sort_values(by='timestamp', ascending=False)
+                # Concatenate the dataframes
+                combined_df = pd.concat([database_df, text_df], ignore_index=True)
+                combined_df = combined_df.sort_values(by='timestamp', ascending=False)
 
-            # Drop duplicates based on lab_book_name and scanned_page_number, keeping the first (latest)
-            latest_df = combined_df.drop_duplicates(subset=['lab_book_name', 'scanned_page_number'], keep='first')
-            latest_df = latest_df.reset_index(drop=True)
-            latest_df.to_csv(DATABASE_TSV, index=False)
+                # Drop duplicates based on lab_book_name and scanned_page_number, keeping the first (latest)
+                latest_df = combined_df.drop_duplicates(subset=['lab_book_name', 'scanned_page_number'], keep='first')
+                latest_df = latest_df.reset_index(drop=True)
+                latest_df.to_csv(DATABASE_TSV, index=False)
 
-            # Save image data
-            os.makedirs(IMAGE_DIR, exist_ok=True)
-            for page_number in range(starting_page_number, max_page_number):
-                image_filename = f"{safe_name}_Page{page_number}.png"
-                png_path = os.path.join(IMAGE_DIR, image_filename)
-                page_img = st.session_state.current_image_dict[page_number]
-                buf = BytesIO()
-                page_img.save(buf, format="PNG")
-                with open(png_path, "wb") as f:
-                    f.write(buf.getbuffer())
+                # Save image data
+                os.makedirs(IMAGE_DIR, exist_ok=True)
+                for page_number in range(starting_page_number, max_page_number):
+                    image_filename = f"{safe_name}_Page{page_number}.png"
+                    png_path = os.path.join(IMAGE_DIR, image_filename)
+                    page_img = st.session_state.current_image_dict[page_number]
+                    buf = BytesIO()
+                    page_img.save(buf, format="PNG")
+                    with open(png_path, "wb") as f:
+                        f.write(buf.getbuffer())
 
-            st.success("✅ Updates saved")
+                st.success("✅ Updates saved")
 
-        # Offer immediate download of the dataframe as CSV
-        safe_name = lab_book_name.replace(" ", "_")
-        csv_buf = BytesIO()
-        st.session_state.uploaded_df.to_csv(csv_buf, sep="\t", index=False)
-        csv_buf.seek(0)
-        st.download_button(
-            label="Download extracted text (TSV)",
-            data=csv_buf.getvalue(),
-            file_name=f"{safe_name}_{st.session_state.timestamp}.tsv",
-            mime="text"
-        )
+            # Offer immediate download of the dataframe as CSV
+            safe_name = lab_book_name.replace(" ", "_")
+            csv_buf = BytesIO()
+            st.session_state.uploaded_df.to_csv(csv_buf, sep="\t", index=False)
+            csv_buf.seek(0)
+            st.download_button(
+                label="Download extracted text (TSV)",
+                data=csv_buf.getvalue(),
+                file_name=f"{safe_name}_{st.session_state.timestamp}.tsv",
+                mime="text"
+            )
 
 
 # ----------------------------
@@ -248,7 +254,7 @@ with tab1:
 with tab2:
     st.subheader("🔍 Ask your lab notebook")
 
-    if st.session_state.uploaded_df is None:
+    if st.session_state.uploaded_df is None or st.session_state.client is None:
         "First upload a lab notebook."
     else:
         notebook_df = st.session_state.uploaded_df
@@ -304,7 +310,7 @@ with tab2:
                     """
 
                     # Call OpenAI API
-                    response_obj = CLIENT.chat.completions.create(
+                    response_obj = st.session_state.client.chat.completions.create(
                         model="gpt-4o-mini",
                         messages=[{"role": "user", "content": prompt}],
                         max_tokens=500
