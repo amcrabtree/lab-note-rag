@@ -56,6 +56,8 @@ if 'starting_page_number' not in st.session_state:
     st.session_state.starting_page_number = None
 if 'current_image_dict' not in st.session_state:
     st.session_state.current_image_dict = None
+if 'password' not in st.session_state:
+    st.session_state.password = None
 if 'client' not in st.session_state:
     st.session_state.client = None
 
@@ -83,7 +85,7 @@ tab1, tab2 = st.tabs(["📚 Upload Notebook", "🔍 Query Notebook"])
 with tab1:
     st.subheader("📚 Upload Lab Notebook")
 
-    if st.session_state.client is None:
+    if st.session_state.password is None:
         password = st.text_input("Enter your password", type="password")
         if password == "yeast":
             st.session_state.client = openai.OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
