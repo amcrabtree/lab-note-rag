@@ -34,6 +34,24 @@ extraction_instructions = """
     Other common terms include "Okada" as a type of dsRNA extraction protocol. 
     If you see a page number at the very bottom of the page, append it to each date header on that page.
     """
+
+def check_openai_api_key(api_key):
+    """
+    Checks if an OpenAI API key is valid by attempting a simple API call.
+    Returns True if the key is valid, False otherwise.
+    """
+    try:
+        client = openai.OpenAI(api_key=api_key)
+        # Attempt a simple API call, like listing models or creating a small completion
+        client.models.list() 
+        return True
+    except openai.AuthenticationError:
+        return False
+    except Exception as e:
+        # Catch other potential errors (e.g., network issues)
+        print(f"An unexpected error occurred: {e}")
+        return False
+    
 # --------- Session State ---------
 if "timestamp" not in st.session_state:
     st.session_state.timestamp = None
@@ -86,11 +104,16 @@ with tab1:
     st.subheader("📚 Upload Lab Notebook")
 
     if st.session_state.client is None:
-        st.session_state.password = st.text_input("Enter your password", type="password")
+        st.session_state.password = st.text_input("Enter your password or OpenAI API key", type="password")
 
     if st.session_state.password != "":
+        # Try API key
+        if check_openai_api_key(st.session_state.password):
+            st.markdown("The OpenAI API key is valid.")
+            st.session_state.password = st.secrets["API_PASSWORD"]
+
         if st.session_state.password != st.secrets["API_PASSWORD"]:
-            st.markdown("Password is incorrect. Try again.")
+            print("Incorrect password or API key.")
         else:
             st.session_state.client = openai.OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 
