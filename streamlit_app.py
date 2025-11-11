@@ -153,7 +153,7 @@ with tab1:
                             'scanned_page_number': [i+1],
                             'physical_page_number': [page_counter],
                             'timestamp': [st.session_state.timestamp],
-                            'image_filename': [f'{lab_book_name}_Page{page_counter}.png'],
+                            #'image_filename': [f'{lab_book_name}_Page{page_counter}.png'],
                             'extracted_text': [text_output],
                         })
                         text_df = pd.concat([text_df, row_df])
