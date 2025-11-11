@@ -17,6 +17,13 @@ IMAGE_DIR = "./database/img"
 DATABASE_TSV = os.path.join(DATABASE_DIR, "lab_book_database.tsv")
 IMAGE_DPI = 100
 
+def split_double_page(image):
+    width, height = image.size
+    if width > height * 1.2:  # heuristic for double pages
+        mid_x = width // 2
+        return [image.crop((0, 0, mid_x+50, height)), image.crop((mid_x-50, 0, width, height))]
+    return [image]
+
 extraction_instructions = """
     You are a microbiology researcher who is tasked with transcribing all the handwritten notes 
     from images of lab notebook pages. Extract all handwritten text from this lab notebook page 
@@ -70,89 +77,12 @@ st.caption("AI-powered lab notebook search.")
 # ----------------------------
 # Tabs
 # ----------------------------
-tab1, tab2 = st.tabs(["🔍 Query Notebook", "📚 Upload Notebook"])
+tab1, tab2 = st.tabs(["📚 Upload Notebook", "🔍 Query Notebook"])
 
 # ----------------------------
-# TAB 1: Query Interface
+# TAB 1: Upload / Update
 # ----------------------------
 with tab1:
-    st.subheader("🔍 Ask your lab notebook")
-
-    notebook_df = st.session_state.uploaded_df
-
-    # Initialize chat history
-    if "messages" not in st.session_state:
-        st.session_state.messages = [
-            {"role": "assistant", "content": "Hi! 👋 What would you like to know about your lab notebooks?"}
-        ]
-
-    # Display chat history
-    for message in st.session_state.messages:
-        with st.chat_message(message["role"]):
-            st.markdown(message["content"])
-
-    # Get user query
-    query = st.chat_input("Ask a question about any lab notebook entry")
-
-    if query:
-        # Display user message
-        st.chat_message("user").markdown(query)
-        st.session_state.messages.append({"role": "user", "content": query})
-
-        with st.chat_message("assistant"):
-            with st.spinner("Looking up your notebook..."):
-
-                # ---------- Step 1: Retrieve relevant entry ----------
-                # Simple keyword search first (can later switch to embeddings for semantic search)
-                matched_entries = notebook_df[notebook_df['extracted_text'].str.contains(query, case=False, na=False)]
-
-                if not matched_entries.empty:
-                    # Take the most relevant entry (here just the first match; can use ranking)
-                    entry = matched_entries.iloc[0]
-                    lab_notebook = entry['lab_notebook']
-                    page_number = entry['physical_page_number']
-                    text_context = entry['extracted_text']
-
-                    # ---------- Step 2: Ask GPT to summarize/interpret ----------
-                    prompt = f"""
-You are an expert lab assistant. Use the following lab notebook text to answer the user's question.
-Lab Notebook Text:
-{text_context}
-
-Question: {query}
-
-Instructions:
-1. Provide a clear, concise answer.
-2. Include the lab notebook name and physical page number in your answer.
-3. Keep it user-friendly and avoid repeating the entire text.
-"""
-                    # Call OpenAI API
-                    response_obj = CLIENT.chat.completions.create(
-                        model="gpt-4o-mini",
-                        messages=[{"role": "user", "content": prompt}],
-                        max_tokens=300
-                    )
-                    response = response_obj.choices[0].message.content.strip()
-
-                else:
-                    response = "I couldn't find any relevant entries in your notebook."
-
-                # Display and store response
-                st.markdown(response)
-                st.session_state.messages.append({"role": "assistant", "content": response})
-
-
-def split_double_page(image):
-    width, height = image.size
-    if width > height * 1.2:  # heuristic for double pages
-        mid_x = width // 2
-        return [image.crop((0, 0, mid_x+50, height)), image.crop((mid_x-50, 0, width, height))]
-    return [image]
-
-# ----------------------------
-# TAB 2: Upload / Update
-# ----------------------------
-with tab2:
     st.subheader("📚 Upload Lab Notebook")
 
     # --- UI ---
@@ -310,6 +240,83 @@ with tab2:
             file_name=f"{safe_name}_{st.session_state.timestamp}.tsv",
             mime="text"
         )
+
+
+# ----------------------------
+# TAB 2: Query Interface
+# ----------------------------
+with tab2:
+    st.subheader("🔍 Ask your lab notebook")
+
+    if st.session_state.uploaded_df is None:
+        "First upload a lab notebook."
+    else:
+        notebook_df = st.session_state.uploaded_df
+
+        # Create a single string containing all notebook entries
+        # This will not be displayed to the user
+        all_notebook_text = ""
+        for i, row in notebook_df.iterrows():
+            all_notebook_text = "\n\n".join(
+                f"Lab Notebook: {row['lab_book_name']}\n"
+                f"Page Number: {row['physical_page_number']}\n"
+                f"Text: {row['extracted_text']}"
+                for _, row in notebook_df.iterrows()
+            )
+
+        # Initialize chat history
+        if "messages" not in st.session_state:
+            st.session_state.messages = [
+                {"role": "assistant", "content": "Hi! 👋 What would you like to know about your lab notebook?"}
+            ]
+
+        # Display chat history
+        for message in st.session_state.messages:
+            with st.chat_message(message["role"]):
+                st.markdown(message["content"])
+
+        # Get user query
+        query = st.chat_input("Ask a question about any lab notebook entry")
+
+        if query:
+            # Display user message
+            st.chat_message("user").markdown(query)
+            st.session_state.messages.append({"role": "user", "content": query})
+
+            with st.chat_message("assistant"):
+                with st.spinner("Looking up your notebook..."):
+
+                    # ---------- Step 1: Ask GPT to find relevant entries ----------
+                    # GPT will scan the single string of all notebook entries
+                    prompt = f"""
+                    You are an expert lab assistant. The user will ask a question about their lab notebooks.
+                    Use the following lab notebook data to answer the question. The data contains multiple pages from different notebooks:
+
+                    {all_notebook_text}
+
+                    Question: {query}
+
+                    Instructions:
+                    1. Identify all relevant pages that answer the question.
+                    2. For each relevant page, provide the lab notebook name and physical page number.
+                    3. Summarize the content only enough to answer the user's question.
+                    4. Keep the answer clear and concise.
+                    """
+
+                    # Call OpenAI API
+                    response_obj = CLIENT.chat.completions.create(
+                        model="gpt-4o-mini",
+                        messages=[{"role": "user", "content": prompt}],
+                        max_tokens=500
+                    )
+                    response = response_obj.choices[0].message.content.strip()
+
+                    # Display and store response
+                    st.markdown(response)
+                    st.session_state.messages.append({"role": "assistant", "content": response})
+
+
+
 
 # with tab3:
 #     st.subheader("🔍 Search Notebook Database")
