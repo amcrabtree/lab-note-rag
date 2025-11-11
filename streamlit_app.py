@@ -13,6 +13,7 @@ DATABASE_DIR = "./database"
 IMAGE_DIR = "./database/img"
 DATABASE_TSV = os.path.join(DATABASE_DIR, "lab_book_database.tsv")
 IMAGE_DPI = 100
+API_PASSWORD = "yeast"
 
 def split_double_page(image):
     width, height = image.size
@@ -85,12 +86,16 @@ tab1, tab2 = st.tabs(["📚 Upload Notebook", "🔍 Query Notebook"])
 with tab1:
     st.subheader("📚 Upload Lab Notebook")
 
-    if st.session_state.password is None:
-        password = st.text_input("Enter your password", type="password")
-        if password == "yeast":
+    if st.session_state.client is None:
+        st.session_state.password = st.text_input("Enter your password", type="password")
+
+    if st.session_state.password != "":
+        if st.session_state.password != API_PASSWORD:
+            st.markdown("Password is incorrect. Try again.")
+        else:
             st.session_state.client = openai.OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 
-    else:
+    if st.session_state.client is not None:
         # --- UI ---
         uploaded_lab_book = st.file_uploader("Upload a combined lab notebook PDF", type=["pdf"],
                                             key=f"upload_{st.session_state.reset_counter}")
@@ -254,7 +259,7 @@ with tab1:
 with tab2:
     st.subheader("🔍 Ask your lab notebook")
 
-    if st.session_state.uploaded_df is None or st.session_state.client is None:
+    if st.session_state.uploaded_df is None or st.session_state.password is None:
         "First upload a lab notebook."
     else:
         notebook_df = st.session_state.uploaded_df
